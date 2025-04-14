@@ -11,6 +11,19 @@ import GameplayKit
 final class GameScene: SKScene {
     
   private  let tileSize: CGFloat = 40.0
+  private let levelMap: [[Int]] = [
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 0, 0, 1, 0, 0, 0, 1, 1],
+            [1, 0, 2, 0, 1, 0, 2, 0, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+            [1, 1, 1, 0, 1, 1, 1, 0, 1, 1],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 2, 0, 1, 0, 2, 0, 0, 1],
+            [1, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+            [1, 1, 0, 0, 0, 0, 3, 0, 1, 1],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 0]
+        ]
+    
     private let wallTexture = SKTexture(imageNamed: "wall_texture")
     private let playerTexture = SKTexture(imageNamed: "player_texture")
     private let blockTexture = SKTexture(imageNamed: "insideWall_texture")
@@ -20,66 +33,78 @@ final class GameScene: SKScene {
     
     var isPlayerMoving = false
     
+    //MARK: Override funcs
     override func didMove(to view: SKView) {
-        backgroundColor = SKColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
+        backgroundColor = SKColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 1.0)
         fieldNode.position = CGPoint(
-            x: size.width/2 - (tileSize * 10)/2,
-            y: size.height/2 - (tileSize * 10)/2
-        )
-        addChild(fieldNode)
-        
-        setupWalls()
-        setupBloks()
-        setupPlayer()
-        drawGrid()
+                    x: size.width/2 - (tileSize * 10)/2,
+                    y: size.height/2 - (tileSize * 10)/2
+                )
+        createLevel()
     }
     
-    func setupWalls() {
-        let rows = 10
-        let cols = 10
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+       
+        let location = touch.location(in: fieldNode)
         
-        for row in 0..<rows {
-            for col in 0..<cols {
-                if row == 0 || row == rows - 1 || col == 0 || col == cols - 1 {
-                    let wall = SKSpriteNode(color: .darkGray, size: CGSize(width: tileSize, height: tileSize))
-                    wall.position = CGPoint(
-                        x: CGFloat(col) * tileSize + tileSize / 2,
-                        y: CGFloat(row) * tileSize + tileSize / 2
-                    )
-                    wall.name = "wall"
-                    wall.texture = wallTexture
-                    fieldNode.addChild(wall)
+        let dx = location.x - player.position.x
+        let dy = location.y - player.position.y
+        
+        if abs(dx) > abs(dy) {
+            tryMove(direction: dx > 0 ? .right : .left)
+        } else {
+            tryMove(direction: dy > 0 ? .up : .down)
+        }
+    }
+    
+    //MARK: Funcs for create texture
+    private func createLevel() {
+        fieldNode.removeAllChildren()
+        
+        for (rowIndex, row) in levelMap.enumerated() {
+            for (colIndex, tile) in row.enumerated() {
+                let position = CGPoint(
+                    x: CGFloat(colIndex) * tileSize + tileSize/2,
+                    y: CGFloat(rowIndex) * tileSize + tileSize/2
+                )
+                
+                switch tile {
+                case 1:
+                    createWall(at: position)
+                case 2:
+                    createBlock(at: position)
+                case 3:
+                    createPlayer(at: position)
+                default:
+                    break
                 }
             }
         }
-    }
-    
-    func setupBloks() {
-        let internalWallsPositions = [
-            CGPoint(x: 2, y: 2),
-            CGPoint(x: 5, y: 5),
-            CGPoint(x: 7, y: 3)
-        ]
         
-        for pos in internalWallsPositions {
-            let wall = SKSpriteNode(color: .darkGray, size: CGSize(width: tileSize, height: tileSize))
-            wall.position = CGPoint(
-                x: pos.x * tileSize + tileSize / 2,
-                y: pos.y * tileSize + tileSize / 2
-            )
-            wall.name = "block"
-            wall.texture = blockTexture
-            fieldNode.addChild(wall)
-        }
+        addChild(fieldNode)
     }
     
-    func setupPlayer() {
+    private func createWall(at position: CGPoint) {
+        let wall = SKSpriteNode(color: .darkGray, size: CGSize(width: tileSize, height: tileSize))
+        wall.position = position
+        wall.name = "wall"
+        wall.texture = wallTexture
+        fieldNode.addChild(wall)
+    }
+    
+    private func createBlock(at position: CGPoint) {
+        let wall = SKSpriteNode(color: .darkGray, size: CGSize(width: tileSize, height: tileSize))
+        wall.position = position
+        wall.name = "block"
+        wall.texture = blockTexture
+        fieldNode.addChild(wall)
+    }
+    
+    private func createPlayer(at position: CGPoint) {
             player = SKSpriteNode(texture: playerTexture)
             player.size = CGSize(width: tileSize, height: tileSize)
-            player.position = CGPoint(
-                x: 1 * tileSize + tileSize/2,
-                y: 1 * tileSize + tileSize/2
-            )
+            player.position = position
             player.name = "player"
             
             player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
@@ -92,7 +117,7 @@ final class GameScene: SKScene {
             fieldNode.addChild(player)
         }
     
-    func drawGrid() {
+    private func drawGrid() {
             let gridColor = SKColor.lightGray.withAlphaComponent(0.3)
             
             for row in 0...10 {
@@ -117,27 +142,9 @@ final class GameScene: SKScene {
                 fieldNode.addChild(line)
             }
         }
-    
-    enum Direction {
-        case up, down, left, right
-    }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let touch = touches.first else { return }
-       
-        let location = touch.location(in: fieldNode)
-        
-        let dx = location.x - player.position.x
-        let dy = location.y - player.position.y
-        
-        if abs(dx) > abs(dy) {
-            tryMove(direction: dx > 0 ? .right : .left)
-        } else {
-            tryMove(direction: dy > 0 ? .up : .down)
-        }
-    }
-
-    func tryMove(direction: Direction) {
+    //MARK: Move funcs
+    private func tryMove(direction: Direction) {
         guard isPlayerMoving == false else {return}
         
         let movementVector: CGVector
@@ -184,21 +191,27 @@ final class GameScene: SKScene {
         }
     }
 
-    func isPositionInsideField(_ position: CGPoint) -> Bool {
-        return position.x >= tileSize/2 &&
-               position.y >= tileSize/2 &&
-               position.x <= tileSize * 10 - tileSize/2 &&
-               position.y <= tileSize * 10 - tileSize/2
+    private func isPositionInsideField(_ position: CGPoint) -> Bool {
+        let col = Int(position.x / tileSize)
+        let row = Int(position.y / tileSize)
+        
+        guard row >= 0, col >= 0,
+              row < levelMap.count,
+              col < levelMap[0].count else {
+            return false
+        }
+        
+        return levelMap[row][col] != 1
     }
 
-    func canPushBlock(at position: CGPoint) -> Bool {
+    private func canPushBlock(at position: CGPoint) -> Bool {
         guard isPositionInsideField(position) else { return false }
         
         let nodes = fieldNode.nodes(at: position)
         return !nodes.contains { $0.name == "wall" || $0.name == "block" }
     }
 
-    func moveNode(_ node: SKSpriteNode, to position: CGPoint, completion: (() -> Void)? = nil) {
+    private func moveNode(_ node: SKSpriteNode, to position: CGPoint, completion: (() -> Void)? = nil) {
         let moveAction = SKAction.move(to: position, duration: 0.2)
         
         if let completion = completion {
@@ -219,7 +232,7 @@ final class GameScene: SKScene {
         }
     }
     
-    func playShakeAnimation() {
+    private func playShakeAnimation() {
         let shake = SKAction.sequence([
             SKAction.moveBy(x: 5, y: 0, duration: 0.05),
             SKAction.moveBy(x: -10, y: 0, duration: 0.05),
