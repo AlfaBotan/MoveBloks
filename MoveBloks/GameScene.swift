@@ -18,6 +18,8 @@ final class GameScene: SKScene {
     private var fieldNode = SKNode()
     private var player: SKSpriteNode!
     
+    var isPlayerMoving = false
+    
     override func didMove(to view: SKView) {
         backgroundColor = SKColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
         fieldNode.position = CGPoint(
@@ -29,7 +31,7 @@ final class GameScene: SKScene {
         setupWalls()
         setupBloks()
         setupPlayer()
-//        drawGrid()
+        drawGrid()
     }
     
     func setupWalls() {
@@ -65,7 +67,7 @@ final class GameScene: SKScene {
                 x: pos.x * tileSize + tileSize / 2,
                 y: pos.y * tileSize + tileSize / 2
             )
-            wall.name = "wall"
+            wall.name = "block"
             wall.texture = blockTexture
             fieldNode.addChild(wall)
         }
@@ -75,46 +77,154 @@ final class GameScene: SKScene {
             player = SKSpriteNode(texture: playerTexture)
             player.size = CGSize(width: tileSize, height: tileSize)
             player.position = CGPoint(
-                x: 1 * tileSize + tileSize/2, // Центр поля (5,5)
+                x: 1 * tileSize + tileSize/2,
                 y: 1 * tileSize + tileSize/2
             )
             player.name = "player"
             
-            // Настройка физического тела
             player.physicsBody = SKPhysicsBody(rectangleOf: player.size)
             player.physicsBody?.isDynamic = true
             player.physicsBody?.affectedByGravity = false
             player.physicsBody?.allowsRotation = false
-            player.physicsBody?.categoryBitMask = 1 // Категория игрока
-            player.physicsBody?.collisionBitMask = 2 // Столкновения со стенами/блоками
+            player.physicsBody?.categoryBitMask = 1
+            player.physicsBody?.collisionBitMask = 2
             
             fieldNode.addChild(player)
         }
     
     func drawGrid() {
-        let rows = 10
-        let cols = 10
+            let gridColor = SKColor.lightGray.withAlphaComponent(0.3)
+            
+            for row in 0...10 {
+                let line = SKShapeNode()
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: 0, y: CGFloat(row) * tileSize))
+                path.addLine(to: CGPoint(x: 10 * tileSize, y: CGFloat(row) * tileSize))
+                line.path = path
+                line.strokeColor = gridColor
+                line.lineWidth = 0.5
+                fieldNode.addChild(line)
+            }
+            
+            for col in 0...10 {
+                let line = SKShapeNode()
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: CGFloat(col) * tileSize, y: 0))
+                path.addLine(to: CGPoint(x: CGFloat(col) * tileSize, y: 10 * tileSize))
+                line.path = path
+                line.strokeColor = gridColor
+                line.lineWidth = 0.5
+                fieldNode.addChild(line)
+            }
+        }
+    
+    enum Direction {
+        case up, down, left, right
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+       
+        let location = touch.location(in: fieldNode)
         
-        for row in 0...rows {
-            let line = SKShapeNode()
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: 0, y: CGFloat(row) * tileSize))
-            path.addLine(to: CGPoint(x: CGFloat(cols) * tileSize, y: CGFloat(row) * tileSize))
-            line.path = path
-            line.strokeColor = SKColor.lightGray.withAlphaComponent(0.5)
-            line.lineWidth = 0.5
-            fieldNode.addChild(line)
+        let dx = location.x - player.position.x
+        let dy = location.y - player.position.y
+        
+        if abs(dx) > abs(dy) {
+            tryMove(direction: dx > 0 ? .right : .left)
+        } else {
+            tryMove(direction: dy > 0 ? .up : .down)
+        }
+    }
+
+    func tryMove(direction: Direction) {
+        guard isPlayerMoving == false else {return}
+        
+        let movementVector: CGVector
+        switch direction {
+        case .up:    movementVector = CGVector(dx: 0, dy: tileSize)
+        case .down:  movementVector = CGVector(dx: 0, dy: -tileSize)
+        case .left:  movementVector = CGVector(dx: -tileSize, dy: 0)
+        case .right: movementVector = CGVector(dx: tileSize, dy: 0)
         }
         
-        for col in 0...cols {
-            let line = SKShapeNode()
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: CGFloat(col) * tileSize, y: 0))
-            path.addLine(to: CGPoint(x: CGFloat(col) * tileSize, y: CGFloat(rows) * tileSize))
-            line.path = path
-            line.strokeColor = SKColor.lightGray.withAlphaComponent(0.5)
-            line.lineWidth = 0.5
-            fieldNode.addChild(line)
+        let newPlayerPosition = CGPoint(
+            x: player.position.x + movementVector.dx,
+            y: player.position.y + movementVector.dy
+        )
+        
+        guard isPositionInsideField(newPlayerPosition) else {
+            playShakeAnimation()
+            return
         }
+        
+        let nodesAtPosition = fieldNode.nodes(at: newPlayerPosition)
+        
+        if nodesAtPosition.contains(where: { $0.name == "wall" }) {
+            playShakeAnimation()
+            return
+        }
+        
+        if let block = nodesAtPosition.first(where: { $0.name == "block" }) as? SKSpriteNode {
+            let newBlockPosition = CGPoint(
+                x: block.position.x + movementVector.dx,
+                y: block.position.y + movementVector.dy
+            )
+            
+            if canPushBlock(at: newBlockPosition) {
+                isPlayerMoving = true
+                moveNode(block, to: newBlockPosition)
+                moveNode(player, to: newPlayerPosition)
+            } else {
+                playShakeAnimation()
+            }
+        } else {
+            isPlayerMoving = true
+            moveNode(player, to: newPlayerPosition)
+        }
+    }
+
+    func isPositionInsideField(_ position: CGPoint) -> Bool {
+        return position.x >= tileSize/2 &&
+               position.y >= tileSize/2 &&
+               position.x <= tileSize * 10 - tileSize/2 &&
+               position.y <= tileSize * 10 - tileSize/2
+    }
+
+    func canPushBlock(at position: CGPoint) -> Bool {
+        guard isPositionInsideField(position) else { return false }
+        
+        let nodes = fieldNode.nodes(at: position)
+        return !nodes.contains { $0.name == "wall" || $0.name == "block" }
+    }
+
+    func moveNode(_ node: SKSpriteNode, to position: CGPoint, completion: (() -> Void)? = nil) {
+        let moveAction = SKAction.move(to: position, duration: 0.2)
+        
+        if let completion = completion {
+            node.run(SKAction.sequence([
+                moveAction,
+                SKAction.run { [weak self] in
+                    self?.isPlayerMoving = false
+                    completion()
+                }
+            ]))
+        } else {
+            node.run(SKAction.sequence([
+                moveAction,
+                SKAction.run { [weak self] in
+                    self?.isPlayerMoving = false
+                }
+            ]))
+        }
+    }
+    
+    func playShakeAnimation() {
+        let shake = SKAction.sequence([
+            SKAction.moveBy(x: 5, y: 0, duration: 0.05),
+            SKAction.moveBy(x: -10, y: 0, duration: 0.05),
+            SKAction.moveBy(x: 5, y: 0, duration: 0.05)
+        ])
+        player.run(shake)
     }
 }
